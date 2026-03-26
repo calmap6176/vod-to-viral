@@ -118,6 +118,8 @@ class Config:
     vertical_face_y: int
     vertical_face_w: int
     vertical_face_h: int
+    vertical_mode: str
+    youtube_url: Optional[str]
 
 
 def load_env_and_args() -> Config:
@@ -172,6 +174,11 @@ def load_env_and_args() -> Config:
         action="store_true",
         help="No descarga el VOD; espera encontrarlo ya en OUTPUT_DIR",
     )
+    general.add_argument(
+        "--youtube-url",
+        type=str,
+        help="URL de video de YouTube para procesar",
+    )
 
     render = parser.add_argument_group("Opciones de render")
     render.add_argument(
@@ -183,6 +190,13 @@ def load_env_and_args() -> Config:
         "--preview-vertical",
         action="store_true",
         help="Genera una imagen preview del layout vertical en lugar del video vertical",
+    )
+    render.add_argument(
+        "--vertical-mode",
+        type=str,
+        choices=["twitch", "center"],
+        default="twitch",
+        help="Modo de render vertical: 'twitch' (facecam + gameplay) o 'center' (crop centrado 9:16)",
     )
 
     detection = parser.add_argument_group("Opciones de detección")
@@ -233,8 +247,9 @@ def load_env_and_args() -> Config:
     user_login = os.getenv("TWITCH_USER_LOGIN")
     output_dir = Path(os.getenv("OUTPUT_DIR", "./out"))
 
-    if not client_id or not client_secret or not user_login:
-        raise ValueError("Faltan variables obligatorias en .env")
+    if not args.youtube_url:
+        if not client_id or not client_secret or not user_login:
+            raise ValueError("Faltan variables obligatorias de Twitch en .env")
 
     return Config(
         client_id=client_id,
@@ -260,7 +275,31 @@ def load_env_and_args() -> Config:
         vertical_face_y=int(os.getenv("VERTICAL_FACE_Y", "8")),
         vertical_face_w=int(os.getenv("VERTICAL_FACE_W", "620")),
         vertical_face_h=int(os.getenv("VERTICAL_FACE_H", "390")),
+        youtube_url=args.youtube_url,
+        vertical_mode=args.vertical_mode,
     )
+
+def get_nvenc_quality_args() -> list[str]:
+    return [
+        "-c:v", "h264_nvenc",
+        "-preset", "p7",
+        "-tune", "hq",
+        "-cq", "18",
+        "-rc", "vbr",
+        "-b:v", "0",
+        "-maxrate", "25M",
+        "-bufsize", "50M",
+        "-pix_fmt", "yuv420p",
+    ]
+
+
+def get_x264_quality_args() -> list[str]:
+    return [
+        "-c:v", "libx264",
+        "-preset", "slow",
+        "-crf", "18",
+        "-pix_fmt", "yuv420p",
+    ]
 
 # ---------------------------------------------------------------------------
 # Funciones de API Twitch
@@ -368,7 +407,8 @@ def download_vod_if_needed(vod: Dict, cfg: Config, logger: logging.Logger) -> Pa
     logger.info("Descargando VOD %s", vod_id)
     ydl_opts = {
         "outtmpl": str(video_path),
-        "format": "mp4/best",
+        "format": "bestvideo*+bestaudio/best",
+        "merge_output_format": "mp4",
         "noplaylist": True,
         "continuedl": True,
         "overwrites": False,
@@ -428,6 +468,39 @@ def download_chat(vod_id, cfg, logger, chat_path: Path) -> bool:
         logger.warning("No se pudo descargar el chat. Continuaré sin chat. Motivo: %s", e)
         return False
 
+def download_youtube_video(url: str, cfg: Config, logger: logging.Logger) -> Path:
+    """Descarga un video de YouTube usando yt-dlp en la mejor calidad posible."""
+    from yt_dlp import YoutubeDL
+
+    cfg.output_dir.mkdir(parents=True, exist_ok=True)
+
+    ydl_opts = {
+        "outtmpl": str(cfg.output_dir / "%(id)s_%(title).80s.%(ext)s"),
+        "format": "bestvideo*+bestaudio/best",
+        "merge_output_format": "mp4",
+        "noplaylist": True,
+        "quiet": False,
+    }
+
+    logger.info("Descargando video de YouTube en máxima calidad...")
+
+    with YoutubeDL(ydl_opts) as ydl:
+        info = ydl.extract_info(url, download=True)
+        filename = ydl.prepare_filename(info)
+
+        ext = info.get("ext", "")
+        video_path = Path(filename)
+
+        if ext and video_path.suffix.lower() != ".mp4":
+            candidate_mp4 = video_path.with_suffix(".mp4")
+            if candidate_mp4.exists():
+                video_path = candidate_mp4
+
+    if not video_path.exists():
+        raise FileNotFoundError("No se pudo descargar el video de YouTube")
+
+    logger.info("Video descargado: %s", video_path)
+    return video_path
 
 # ---------------------------------------------------------------------------
 # Análisis de video y audio
@@ -610,27 +683,20 @@ def get_torch_device_and_compute_type(logger: logging.Logger) -> tuple[str, str]
         return "cpu", "float32"
 
 
-def get_ffmpeg_video_encoder() -> str:
-    return "h264_nvenc"
-
-
 def ffmpeg_hwaccel_input_args() -> list[str]:
     return ["-hwaccel", "cuda"]
 
-
-def transcribe_to_srt(
+def transcribe(
     video_path: Path, cfg: Config, logger: logging.Logger
-) -> tuple[Path, list[dict]]:
+) -> list[dict]:
     from faster_whisper import WhisperModel
 
-    srt_path = video_path.with_suffix(".srt")
     seg_path = video_path.with_suffix(".segments.json")
 
-    if srt_path.exists():
-        logger.info("SRT existente: %s", srt_path)
-        segs = _safe_load_segments_json(seg_path, logger)
-        if segs is not None:
-            return srt_path, segs
+    segs = _safe_load_segments_json(seg_path, logger)
+    if segs is not None:
+        logger.info("Segments existentes: %s", seg_path)
+        return segs
 
     device, compute_type = get_torch_device_and_compute_type(logger)
     logger.info(
@@ -639,15 +705,6 @@ def transcribe_to_srt(
         device,
         compute_type,
     )
-
-    hf_token = os.getenv("HF_TOKEN") or os.getenv("HUGGINGFACE_HUB_TOKEN")
-
-    if hf_token:
-        if not os.getenv("HUGGINGFACE_HUB_TOKEN"):
-            os.environ["HUGGINGFACE_HUB_TOKEN"] = hf_token
-        logger.info("Hugging Face autenticado (HF_TOKEN detectado)")
-    else:
-        logger.info("HF_TOKEN no definido → modo público (posibles rate limits)")
 
     model = WhisperModel(
         cfg.model_size,
@@ -662,55 +719,50 @@ def transcribe_to_srt(
         vad_filter=True,
         word_timestamps=True,
         condition_on_previous_text=True,
-        initial_prompt="El audio es en español de México. Usa puntuación natural y conserva jerga gamer/stream. No traduzcas.",
+        initial_prompt=(
+            "El audio es en español de México. Usa puntuación natural "
+            "y conserva jerga gamer/stream. No traduzcas."
+        ),
     )
 
     rows: list[dict] = []
-    with srt_path.open("w", encoding="utf-8") as srt_file:
-        for i, seg in enumerate(segments, start=1):
-            start = float(seg.start)
-            end = float(seg.end)
-            text = (seg.text or "").strip()
 
-            srt_file.write(f"{i}\n")
-            srt_file.write(f"{format_timestamp(start)} --> {format_timestamp(end)}\n{text}\n\n")
+    for seg in segments:
+        start = float(seg.start)
+        end = float(seg.end)
+        text = (seg.text or "").strip()
 
-            words = []
-            if hasattr(seg, "words") and seg.words:
-                for w in seg.words:
-                    w_word = (getattr(w, "word", "") or "").strip()
-                    w_start = getattr(w, "start", None)
-                    w_end = getattr(w, "end", None)
-                    if not w_word or w_start is None or w_end is None:
-                        continue
-                    words.append(
-                        {
-                            "word": w_word,
-                            "start": float(w_start),
-                            "end": float(w_end),
-                        }
-                    )
+        words: list[dict] = []
+        if hasattr(seg, "words") and seg.words:
+            for w in seg.words:
+                w_word = (getattr(w, "word", "") or "").strip()
+                w_start = getattr(w, "start", None)
+                w_end = getattr(w, "end", None)
 
-            rows.append(
-                {
-                    "start": start,
-                    "end": end,
-                    "text": text,
-                    "confidence": float(getattr(seg, "avg_logprob", 0.0)),
-                    "words": words,
-                }
-            )
+                if not w_word or w_start is None or w_end is None:
+                    continue
+
+                words.append(
+                    {
+                        "word": w_word,
+                        "start": float(w_start),
+                        "end": float(w_end),
+                    }
+                )
+
+        rows.append(
+            {
+                "start": start,
+                "end": end,
+                "text": text,
+                "confidence": float(getattr(seg, "avg_logprob", 0.0)),
+                "words": words,
+            }
+        )
 
     _atomic_write_json(seg_path, rows, logger)
-    return srt_path, rows
-
-
-def format_timestamp(seconds: float) -> str:
-    h = int(seconds // 3600)
-    m = int((seconds % 3600) // 60)
-    s = seconds % 60
-    return f"{h:02d}:{m:02d}:{s:06.3f}".replace(".", ",")
-
+    logger.info("Segments guardados en: %s", seg_path)
+    return rows
 
 def ass_escape_text(text: str) -> str:
     return (
@@ -827,9 +879,16 @@ def make_retro_ass_from_segments(
 
             line_groups = split_chunk_into_lines(chunk)
 
+            chunk_start = max(0.0, float(chunk[0]["start"]))
+            chunk_end = max(chunk_start + 0.05, float(chunk[-1]["end"]) + 0.10)
+
             for active_idx, active_word in enumerate(chunk):
                 ev_start = max(0.0, float(active_word["start"]))
-                ev_end = max(ev_start + 0.02, float(active_word["end"]))
+
+                if active_idx + 1 < len(chunk):
+                    ev_end = max(ev_start + 0.02, float(chunk[active_idx + 1]["start"]))
+                else:
+                    ev_end = chunk_end
 
                 styled_lines: list[str] = []
                 running_idx = 0
@@ -1099,12 +1158,19 @@ def merge_signals_and_pick_clips(
         if m > 0:
             df[col] = df[col] / m
 
-    df["merged"] = (
-        df["audio_score"] * 0.35
-        + df["text_score"] * 0.30
-        + df["chat_score"] * 0.25
-        + df["motion"] * 0.10
-    )
+    if cfg.youtube_url:
+        df["merged"] = (
+            df["audio_score"] * 0.65
+            + df["motion"] * 0.35
+        )
+    else:
+        df["merged"] = (
+            df["audio_score"] * 0.35
+            + df["text_score"] * 0.30
+            + df["chat_score"] * 0.25
+            + df["motion"] * 0.10
+        )
+
     df["smooth"] = df["merged"].rolling(window=5, min_periods=1, center=True).max()
 
     from scipy.signal import find_peaks
@@ -1155,48 +1221,6 @@ def merge_signals_and_pick_clips(
 # Renderizado de clips
 # ---------------------------------------------------------------------------
 
-
-def extract_srt_segment(src: Path, start: float, end: float, dest: Path) -> None:
-    """Crea un SRT con los subtítulos dentro del rango [start, end]."""
-    try:
-        import pysrt
-    except Exception as e:
-        raise RuntimeError("Falta instalar 'pysrt' (pip install pysrt)") from e
-
-    subs = pysrt.open(str(src), encoding="utf-8")
-    segment = pysrt.SubRipFile()
-    clip_len = max(0.0, end - start)
-
-    def sec_to_subriptime(sec: float) -> "pysrt.SubRipTime":
-        ms = max(0, int(round(sec * 1000)))
-        return pysrt.SubRipTime(milliseconds=ms)
-
-    for sub in subs:
-        sub_start = sub.start.ordinal / 1000.0
-        sub_end = sub.end.ordinal / 1000.0
-
-        if sub_end < start or sub_start > end:
-            continue
-
-        new_s = max(0.0, sub_start - start)
-        new_e = min(clip_len, sub_end - start)
-        if abs(new_e - new_s) < 0.001:
-            continue
-
-        new_item = pysrt.SubRipItem(
-            index=len(segment) + 1,
-            start=sec_to_subriptime(new_s),
-            end=sec_to_subriptime(new_e),
-            text=sub.text or "",
-        )
-        segment.append(new_item)
-
-    segment.sort(key=lambda it: it.start.ordinal)
-    segment.clean_indexes()
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    segment.save(str(dest), encoding="utf-8")
-
-
 def extract_segment_words_for_clip(
     segments: list[dict],
     clip_start: float,
@@ -1243,7 +1267,6 @@ def extract_segment_words_for_clip(
 def render_clip_with_subs(
     clip: Clip,
     video_path: Path,
-    srt_path: Path,
     segments: list[dict],
     out_dir: Path,
     cfg: Config,
@@ -1251,9 +1274,6 @@ def render_clip_with_subs(
 ) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     base_name = f"clip_{int(clip.score*100)}_{int(clip.start)}-{int(clip.end)}"
-
-    clip_srt = out_dir / f"{base_name}.srt"
-    extract_srt_segment(srt_path, clip.start, clip.end, clip_srt)
 
     clip_ass = out_dir / f"{base_name}.ass"
     clip_segments = extract_segment_words_for_clip(segments, clip.start, clip.end)
@@ -1265,8 +1285,10 @@ def render_clip_with_subs(
     )
 
     v_in = str(video_path.resolve())
-    vcodec = get_ffmpeg_video_encoder()
 
+    # -------------------------------------------------
+    # 1) Render horizontal 16:9
+    # -------------------------------------------------
     out_169 = out_dir / f"{base_name}_16x9.mp4"
     cmd_cut_169 = [
         "ffmpeg",
@@ -1281,16 +1303,7 @@ def render_clip_with_subs(
         f"{clip.end}",
         "-i",
         v_in,
-        "-c:v",
-        vcodec,
-        "-preset",
-        "p5",
-        "-cq",
-        "23",
-        "-rc",
-        "vbr",
-        "-b:v",
-        "0",
+        *get_nvenc_quality_args(),
         "-c:a",
         "aac",
         "-b:a",
@@ -1325,12 +1338,7 @@ def render_clip_with_subs(
             f"{clip.end}",
             "-i",
             v_in,
-            "-c:v",
-            "libx264",
-            "-preset",
-            "fast",
-            "-crf",
-            "21",
+            *get_x264_quality_args(),
             "-c:a",
             "aac",
             "-b:a",
@@ -1354,9 +1362,42 @@ def render_clip_with_subs(
             logger.error("ffmpeg cut 16:9 falló.\n%s", res_cpu.stderr)
             raise RuntimeError("ffmpeg cut 16:9 failed")
 
-    if cfg.vertical:
-        out = out_dir / f"{base_name}_9x16.mp4"
+    # -------------------------------------------------
+    # 2) Render vertical 9:16
+    # -------------------------------------------------
+    if not cfg.vertical:
+        return
 
+    out = out_dir / f"{base_name}_9x16.mp4"
+
+    if cfg.vertical_mode == "center":
+        center_crop = (
+            "crop="
+            "ih*(9/16):"
+            "ih:"
+            "(iw-ih*(9/16))/2:"
+            "0"
+        )
+
+        if ass_ok and clip_ass.exists() and clip_ass.stat().st_size > 0:
+            ass_path = ffmpeg_ass_path(clip_ass)
+            filtergraph = (
+                f"[0:v]{center_crop},"
+                f"scale=1080:1920:flags=lanczos,"
+                f"unsharp=5:5:0.6:5:5:0.0,"
+                f"setsar=1[stack];"
+                f"[stack]ass='{ass_path}'[outv]"
+            )
+        else:
+            logger.warning("No se pudo generar ASS válido. Renderizaré vertical sin subtítulos quemados.")
+            filtergraph = (
+                f"[0:v]{center_crop},"
+                f"scale=1080:1920:flags=lanczos,"
+                f"unsharp=5:5:0.6:5:5:0.0,"
+                f"setsar=1[outv]"
+            )
+
+    else:
         face = (
             f"crop={cfg.vertical_face_w}:{cfg.vertical_face_h}:"
             f"{cfg.vertical_face_x}:{cfg.vertical_face_y}"
@@ -1398,13 +1439,55 @@ def render_clip_with_subs(
             logger.warning("No se pudo generar ASS válido. Renderizaré vertical sin subtítulos quemados.")
             filtergraph = filtergraph_base + ";[stack]null[outv]"
 
-        cmd = [
+    cmd = [
+        "ffmpeg",
+        "-y",
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        *ffmpeg_hwaccel_input_args(),
+        "-ss",
+        f"{clip.start}",
+        "-to",
+        f"{clip.end}",
+        "-i",
+        v_in,
+        "-filter_complex",
+        filtergraph,
+        "-map",
+        "[outv]",
+        "-map",
+        "0:a?",
+        *get_nvenc_quality_args(),
+        "-c:a",
+        "aac",
+        "-b:a",
+        "160k",
+        "-movflags",
+        "+faststart",
+        "-reset_timestamps",
+        "1",
+        "-avoid_negative_ts",
+        "make_zero",
+        str(out),
+    ]
+
+    logger.info("Render 9:16 GPU con subtítulos + punch-in → %s", out)
+    res = subprocess.run(
+        cmd,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+    if res.returncode != 0:
+        logger.warning("NVENC 9:16 falló, haré fallback CPU.\n%s", res.stderr)
+        cmd_cpu = [
             "ffmpeg",
             "-y",
             "-hide_banner",
             "-loglevel",
             "error",
-            *ffmpeg_hwaccel_input_args(),
             "-ss",
             f"{clip.start}",
             "-to",
@@ -1417,18 +1500,7 @@ def render_clip_with_subs(
             "[outv]",
             "-map",
             "0:a?",
-            "-c:v",
-            vcodec,
-            "-preset",
-            "p5",
-            "-cq",
-            "23",
-            "-rc",
-            "vbr",
-            "-b:v",
-            "0",
-            "-pix_fmt",
-            "yuv420p",
+            *get_x264_quality_args(),
             "-c:a",
             "aac",
             "-b:a",
@@ -1441,70 +1513,20 @@ def render_clip_with_subs(
             "make_zero",
             str(out),
         ]
-
-        logger.info("Render 9:16 GPU con subtítulos + punch-in → %s", out)
-        res = subprocess.run(
-            cmd,
+        res_cpu = subprocess.run(
+            cmd_cpu,
             capture_output=True,
             text=True,
             encoding="utf-8",
             errors="replace",
         )
-        if res.returncode != 0:
-            logger.warning("NVENC 9:16 falló, haré fallback CPU.\n%s", res.stderr)
-            cmd_cpu = [
-                "ffmpeg",
-                "-y",
-                "-hide_banner",
-                "-loglevel",
-                "error",
-                "-ss",
-                f"{clip.start}",
-                "-to",
-                f"{clip.end}",
-                "-i",
-                v_in,
-                "-filter_complex",
-                filtergraph,
-                "-map",
-                "[outv]",
-                "-map",
-                "0:a?",
-                "-c:v",
-                "libx264",
-                "-preset",
-                "fast",
-                "-crf",
-                "21",
-                "-pix_fmt",
-                "yuv420p",
-                "-c:a",
-                "aac",
-                "-b:a",
-                "160k",
-                "-movflags",
-                "+faststart",
-                "-reset_timestamps",
-                "1",
-                "-avoid_negative_ts",
-                "make_zero",
-                str(out),
-            ]
-            res_cpu = subprocess.run(
-                cmd_cpu,
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-            )
-            if res_cpu.returncode != 0:
-                logger.error("ffmpeg error:\n%s", res_cpu.stderr)
-                raise RuntimeError("ffmpeg reaction render failed")
-
+        if res_cpu.returncode != 0:
+            logger.error("ffmpeg error:\n%s", res_cpu.stderr)
+            raise RuntimeError("ffmpeg reaction render failed")
+        
 
 def quick_test(
     video_path: Path,
-    srt_path: Path,
     segments: list[dict],
     cfg: Config,
     logger: logging.Logger,
@@ -1527,7 +1549,6 @@ def quick_test(
     render_clip_with_subs(
         clip,
         video_path,
-        srt_path,
         segments,
         cfg.output_dir / "test_clip",
         cfg,
@@ -1546,28 +1567,48 @@ def render_vertical_preview_frame(
         f"{cfg.vertical_face_x}:{cfg.vertical_face_y}"
     )
 
-    hype_zoom = 1.08
-    game = (
-        f"crop="
-        f"ih*(1080/{cfg.vertical_bot_h})/{hype_zoom}:"
-        f"ih/{hype_zoom}:"
-        f"(iw-ih*(1080/{cfg.vertical_bot_h})/{hype_zoom})/2:"
-        f"(ih-ih/{hype_zoom})/2"
-    )
+    if cfg.vertical_mode == "center":
+            center_crop = (
+                "crop="
+                "ih*(9/16):"
+                "ih:"
+                "(iw-ih*(9/16))/2:"
+                "0"
+            )
 
-    filtergraph = (
-        f"[0:v]{face},"
-        f"scale=1080:{cfg.vertical_top_h}:force_original_aspect_ratio=decrease:flags=lanczos,"
-        f"setsar=1[face_scaled];"
-        f"[face_scaled]pad=1080:{cfg.vertical_top_h}:(ow-iw)/2:(oh-ih)/2:black[face_pad];"
-        f"[face_pad]drawbox=x=0:y=0:w=iw:h=ih:color=white@0.10:t=3[face];"
-        f"color=c=black:s=1080x{cfg.vertical_gap_h}:d=1[gap];"
-        f"[0:v]{game},"
-        f"scale=1080:{cfg.vertical_bot_h}:force_original_aspect_ratio=increase:flags=lanczos,"
-        f"setsar=1[game_scaled];"
-        f"[game_scaled]crop=1080:{cfg.vertical_bot_h}:(iw-1080)/2:(ih-{cfg.vertical_bot_h})/2[game_final];"
-        f"[face][gap][game_final]vstack=inputs=3[outv]"
-    )
+            filtergraph = (
+                f"[0:v]{center_crop},"
+                f"scale=1080:1920:flags=lanczos,"
+                f"setsar=1[outv]"
+            )
+    else:
+        face = (
+            f"crop={cfg.vertical_face_w}:{cfg.vertical_face_h}:"
+            f"{cfg.vertical_face_x}:{cfg.vertical_face_y}"
+        )
+
+        hype_zoom = 1.08
+        game = (
+            f"crop="
+            f"ih*(1080/{cfg.vertical_bot_h})/{hype_zoom}:"
+            f"ih/{hype_zoom}:"
+            f"(iw-ih*(1080/{cfg.vertical_bot_h})/{hype_zoom})/2:"
+            f"(ih-ih/{hype_zoom})/2"
+        )
+
+        filtergraph = (
+            f"[0:v]{face},"
+            f"scale=1080:{cfg.vertical_top_h}:force_original_aspect_ratio=decrease:flags=lanczos,"
+            f"setsar=1[face_scaled];"
+            f"[face_scaled]pad=1080:{cfg.vertical_top_h}:(ow-iw)/2:(oh-ih)/2:black[face_pad];"
+            f"[face_pad]drawbox=x=0:y=0:w=iw:h=ih:color=white@0.10:t=3[face];"
+            f"color=c=black:s=1080x{cfg.vertical_gap_h}:d=1[gap];"
+            f"[0:v]{game},"
+            f"scale=1080:{cfg.vertical_bot_h}:force_original_aspect_ratio=increase:flags=lanczos,"
+            f"setsar=1[game_scaled];"
+            f"[game_scaled]crop=1080:{cfg.vertical_bot_h}:(iw-1080)/2:(ih-{cfg.vertical_bot_h})/2[game_final];"
+            f"[face][gap][game_final]vstack=inputs=3[outv]"
+        )
 
     frame_time = clip.start + 0.5
 
@@ -1602,8 +1643,39 @@ def render_vertical_preview_frame(
         errors="replace",
     )
     if res.returncode != 0:
-        logger.error("ffmpeg preview error:\n%s", res.stderr)
-        raise RuntimeError("ffmpeg vertical preview failed")
+        logger.warning("Preview vertical con CUDA falló, haré fallback CPU.\n%s", res.stderr)
+
+        cmd_cpu = [
+            "ffmpeg",
+            "-y",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-ss",
+            f"{frame_time}",
+            "-i",
+            str(video_path),
+            "-filter_complex",
+            filtergraph,
+            "-map",
+            "[outv]",
+            "-frames:v",
+            "1",
+            "-q:v",
+            "2",
+            str(out),
+        ]
+
+        res_cpu = subprocess.run(
+            cmd_cpu,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+        if res_cpu.returncode != 0:
+            logger.error("ffmpeg preview error (CPU fallback):\n%s", res_cpu.stderr)
+            raise RuntimeError("ffmpeg vertical preview failed")
 
 
 # ---------------------------------------------------------------------------
@@ -1703,7 +1775,6 @@ def clean_workspace(cfg, logger, mode: str = "cache") -> dict:
     logger.info("Limpieza iniciada (modo=%s). output_dir=%s", mode, out)
 
     artifact_patterns = [
-        "*.srt",
         "*.ass",
         "*.segments.json",
         "*.motion.csv",
@@ -1780,33 +1851,53 @@ def main() -> None:
             logger.info("Reset-only: %s", summary)
             print(f"[reset] {summary['files']} archivos y {summary['dirs']} carpetas eliminadas")
             return
+        
+    if cfg.youtube_url and cfg.vertical and cfg.vertical_mode == "twitch":
+        logger.info("Modo YouTube detectado → cambiando vertical_mode a 'center'")
+        cfg.vertical_mode = "center"
+
+    if cfg.youtube_url and cfg.peak_height >= 0.5:
+        logger.info("Modo YouTube detectado → ajustando peak_height a 0.25")
+        cfg.peak_height = 0.25
 
     try:
-        token = get_access_token(cfg, logger)
-        user_id = get_user_id(cfg, token, logger)
+        if cfg.youtube_url:
+            video_path = download_youtube_video(cfg.youtube_url, cfg, logger)
 
-        vod = (
-            {
-                "id": cfg.vod_id,
-                "url": f"https://www.twitch.tv/videos/{cfg.vod_id}",
-                "title": cfg.vod_id,
-                "created_at": "",
+            vod = {
+                "id": Path(video_path).stem,
+                "title": Path(video_path).stem,
+                "duration": "",
             }
-            if cfg.vod_id
-            else get_latest_vod(user_id, cfg, token, logger)
-        )
 
-        video_path = download_vod_if_needed(vod, cfg, logger)
+            chat_path = cfg.output_dir / f"{vod['id']}_chat.json"
+            logger.info("Modo YouTube → sin chat")
+        else:
+            token = get_access_token(cfg, logger)
+            user_id = get_user_id(cfg, token, logger)
 
-        chat_path = cfg.output_dir / f"{vod['id']}_chat.json"
-        chat_ok = download_chat(vod["id"], cfg, logger, chat_path)
-        if not chat_ok:
-            logger.warning("Seguimos el pipeline sin chat para este VOD.")
+            vod = (
+                {
+                    "id": cfg.vod_id,
+                    "url": f"https://www.twitch.tv/videos/{cfg.vod_id}",
+                    "title": cfg.vod_id,
+                    "created_at": "",
+                }
+                if cfg.vod_id
+                else get_latest_vod(user_id, cfg, token, logger)
+            )
+
+            video_path = download_vod_if_needed(vod, cfg, logger)
+
+            chat_path = cfg.output_dir / f"{vod['id']}_chat.json"
+            chat_ok = download_chat(vod["id"], cfg, logger, chat_path)
+            if not chat_ok:
+                logger.warning("Seguimos el pipeline sin chat para este VOD.")
 
         motion = analyze_motion(video_path, logger)
         audio_wav = extract_audio(video_path, logger)
         audio_scores = analyze_audio_emotion(audio_wav, logger)
-        srt_path, segments = transcribe_to_srt(video_path, cfg, logger)
+        segments = transcribe(video_path, cfg, logger)
         text_scores, chat_scores = score_text_and_chat(segments, chat_path, logger)
 
         clips = merge_signals_and_pick_clips(
@@ -1826,7 +1917,6 @@ def main() -> None:
                 render_clip_with_subs(
                     clip,
                     video_path,
-                    srt_path,
                     segments,
                     clips_dir,
                     cfg,
@@ -1835,7 +1925,7 @@ def main() -> None:
 
         write_report(vod, clips, cfg, cfg.output_dir / str(vod["id"]), logger)
 
-        # quick_test(video_path, srt_path, segments, cfg, logger)
+        # quick_test(video_path, segments, cfg, logger)
 
     except Exception as exc:
         logger.exception("Error durante la ejecución: %s", exc)
