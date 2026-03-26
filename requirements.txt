@@ -1,0 +1,48 @@
+# =========================
+# Core
+# =========================
+python-dotenv
+requests==2.32.3
+charset-normalizer==3.3.2
+
+yt-dlp>=2024.3.10
+opencv-python-headless
+numpy
+pandas
+scipy
+tqdm
+
+# =========================
+# AI / Audio / Whisper
+# =========================
+torch>=2.2.0
+faster-whisper
+librosa>=0.10.1
+soundfile
+
+# =========================
+# Subtítulos
+# =========================
+pysrt
+srt
+
+# =========================
+# Utilidades
+# =========================
+python-dateutil
+colorlog
+beautifulsoup4
+lxml
+
+# =========================
+# Opcionales PRO (recomendado)
+# =========================
+orjson          # JSON ultra rápido
+rich            # logs bonitos
+
+# =========================
+# Liberías externas para análisis de chat
+# =========================
+#TwitchDownloaderCLI # Comentado porque no es necesario instalarlo como librería, se usa el CLI directamente
+#ffmpeg # Comentado porque no es necesario instalarlo como librería, se usa el CLI directamente
+#Se añaden ambas al path del sistema para usarlas directamente desde la terminal

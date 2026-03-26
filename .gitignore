@@ -1,0 +1,83 @@
+# =========================
+# Python
+# =========================
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual env
+.venv/
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# =========================
+# Config local
+# =========================
+.env
+*.env
+
+# =========================
+# Temp / cache
+# =========================
+*.log
+process.log
+*.tmp
+*.temp
+*.bak
+*.swp
+
+.cache/
+pip-wheel-metadata/
+
+# =========================
+# Output generado
+# =========================
+output/
+out/
+clips/
+reports/
+
+# Video / audio
+*.mp4
+*.mkv
+*.avi
+*.mov
+*.flv
+*.wav
+*.mp3
+*.aac
+*.ogg
+
+# Subtítulos
+*.srt
+*.ass
+
+# Datos intermedios (solo específicos)
+*.segments.json
+*_chat.json
+*.motion.csv
+
+# =========================
+# Build
+# =========================
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# =========================
+# AI / modelos (opcional)
+# =========================
+models/
+*.bin
+
+# =========================
+# OS
+# =========================
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Icon?
