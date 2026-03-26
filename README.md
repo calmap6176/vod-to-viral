@@ -82,10 +82,16 @@ Todos los factores se combinan para detectar los mejores momentos del stream.
 
 > 🚨 **Regla obligatoria para el modo `twitch`:**
 
+EJEMPLO DE LAYOUT
+<img src="assets/demo_horizontal.png" width="300">
+
 - La **cámara SIEMPRE debe estar del lado superior izquierdo del video**
 - El layout vertical está diseñado como:
   - Parte superior → **facecam**
   - Parte inferior → **gameplay**
+
+RESULTADO
+<img src="assets/demo_vertical.png" width="300">
 
 ### ❗ ¿Por qué es obligatorio?
 
