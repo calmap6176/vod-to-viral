@@ -82,7 +82,7 @@ Todos los factores se combinan para detectar los mejores momentos del stream.
 
 > 🚨 **Regla obligatoria para el modo `twitch`:**
 
-- La **cámara SIEMPRE debe estar del lado izquierdo del video**
+- La **cámara SIEMPRE debe estar del lado superior izquierdo del video**
 - El layout vertical está diseñado como:
   - Parte superior → **facecam**
   - Parte inferior → **gameplay**
